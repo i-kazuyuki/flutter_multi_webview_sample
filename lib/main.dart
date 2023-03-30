@@ -1,13 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:math';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -24,27 +25,58 @@ class MyApp extends StatelessWidget {
 class MyHomePage extends StatefulWidget {
   final String title;
 
-  const MyHomePage({super.key, required this.title});
+  const MyHomePage({Key? key, required this.title}) : super(key: key);
 
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  List<String> _items = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+  @override
+  void initState() {
+    Timer.periodic(const Duration(seconds: 5), (timer) async {
+      await refetch();
+    });
 
-  void _addItem() {
-    var newItemList = [..._items, _generateString()];
+    super.initState();
+  }
+
+  Future<void> refetch() async {
     setState(() {
-      _items = newItemList;
+      // とりあえず更新は同じitemを入れるだけにしている
+      _items = [..._items];
     });
   }
 
-  void _removeItem(int index) {
-    var tmp = _items;
-    tmp.removeAt(index);
+  List generateNewData() {
+    final newData = [];
+    for(var i=0; i<1; i++){
+      newData.add(Item(id: UniqueKey(), title: _generateString()));
+    }
+    return newData;
+  }
+
+  List<Item> _items = [
+    Item(id: UniqueKey(), title: "a"),
+    Item(id: UniqueKey(), title: "b"),
+    Item(id: UniqueKey(), title: "c"),
+    Item(id: UniqueKey(), title: "d"),
+    Item(id: UniqueKey(), title: "e"),
+  ];
+
+  void _addItem() {
     setState(() {
-      _items = tmp;
+      _items = [
+        Item(id: UniqueKey(), title: _generateString()),
+        ..._items,
+      ];
+    });
+  }
+
+  void _removeItem(Key key) {
+    setState(() {
+      final index = _items.indexWhere((item) => item.id == key);
+      _items[index] = Item(id: _items[index].id, title: '');
     });
   }
 
@@ -64,25 +96,13 @@ class _MyHomePageState extends State<MyHomePage> {
       body: ListView.builder(
         itemCount: _items.length,
         itemBuilder: (BuildContext context, int index) {
-          return Column(
-            children: [
-              ListTile(
-                title: Text(_items[index]),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete),
-                  onPressed: () => _removeItem(index),
-                ),
-              ),
-              SizedBox(
-                width: 500,
-                height: 150,
-                child: Card(
-                  child: InAppWebView(
-                    initialUrlRequest: URLRequest(url: Uri.parse("https://flutter.dev/"))
-                  )
-                )
-              ),
-            ],
+          if (_items[index].title == '') {
+            return const SizedBox.shrink();
+          }
+          return ItemWidget(
+            item: _items[index],
+            onTap: () => _removeItem(_items[index].id),
+            key: _items[index].id,
           );
         },
       ),
@@ -91,6 +111,51 @@ class _MyHomePageState extends State<MyHomePage> {
         tooltip: 'Add Item',
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+class Item {
+  final Key id;
+  final String title;
+
+  Item({
+    required this.id,
+    required this.title,
+  });
+}
+
+class ItemWidget extends StatelessWidget {
+  final Item item;
+  final VoidCallback onTap;
+
+  const ItemWidget({
+    Key? key,
+    required this.item,
+    required this.onTap,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ListTile(
+          title: Text(item.title),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: onTap,
+          ),
+        ),
+        SizedBox(
+          width: 500,
+          height: 150,
+          child: Card(
+            child: WebView(
+              initialUrl: "https://www.google.com/search?q=${item.title}",
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
