@@ -34,6 +34,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
+    // Refetch once every 5 seconds.
     Timer.periodic(const Duration(seconds: 5), (timer) async {
       await refetch();
     });
@@ -43,31 +44,34 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> refetch() async {
     setState(() {
-      // とりあえず更新は同じitemを入れるだけにしている
-      _items = [..._items];
+      // Add one item every five times. Otherwise, no item changes.
+      if (_refetchCount % 5 == 0) {
+        _items = [generateNewData(), ..._items];
+      } else {
+        _items = [..._items];
+      }
+      _refetchCount ++;
     });
   }
 
-  List generateNewData() {
-    final newData = [];
-    for(var i=0; i<1; i++){
-      newData.add(Item(id: UniqueKey(), title: _generateString()));
-    }
-    return newData;
+  int _refetchCount = 0;
+
+  Item generateNewData() {
+    return Item(id: ValueKey<int>(_items.length + 1), title: _generateString());
   }
 
   List<Item> _items = [
-    Item(id: UniqueKey(), title: "a"),
-    Item(id: UniqueKey(), title: "b"),
-    Item(id: UniqueKey(), title: "c"),
-    Item(id: UniqueKey(), title: "d"),
-    Item(id: UniqueKey(), title: "e"),
+    Item(id: ValueKey<int>(0), title: "a"),
+    Item(id: ValueKey<int>(1), title: "b"),
+    Item(id: ValueKey<int>(2), title: "c"),
+    Item(id: ValueKey<int>(3), title: "d"),
+    Item(id: ValueKey<int>(4), title: "e"),
   ];
 
   void _addItem() {
     setState(() {
       _items = [
-        Item(id: UniqueKey(), title: _generateString()),
+        Item(id: ValueKey<int>(_items.length + 1), title: _generateString()),
         ..._items,
       ];
     });
@@ -87,6 +91,16 @@ class _MyHomePageState extends State<MyHomePage> {
         List.generate(length, (index) => random.nextInt(26) + 65));
   }
 
+  int? _findChildIndexCallback(Key key) {
+    for (int index = 0; index < _items.length; index++) {
+      final Item item = _items[index];
+      if (item.id == key) {
+        return index;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -95,6 +109,8 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       body: ListView.builder(
         itemCount: _items.length,
+        findChildIndexCallback: (Key key) => _findChildIndexCallback(key),
+        cacheExtent: double.maxFinite,
         itemBuilder: (BuildContext context, int index) {
           if (_items[index].title == '') {
             return const SizedBox.shrink();
@@ -103,6 +119,7 @@ class _MyHomePageState extends State<MyHomePage> {
             item: _items[index],
             onTap: () => _removeItem(_items[index].id),
             key: _items[index].id,
+            index: index,
           );
         },
       ),
@@ -128,11 +145,13 @@ class Item {
 class ItemWidget extends StatelessWidget {
   final Item item;
   final VoidCallback onTap;
+  final int index;
 
   const ItemWidget({
     Key? key,
     required this.item,
     required this.onTap,
+    required this.index,
   }) : super(key: key);
 
   @override
@@ -140,7 +159,8 @@ class ItemWidget extends StatelessWidget {
     return Column(
       children: [
         ListTile(
-          title: Text(item.title),
+          key: ValueKey(item.id),
+          title: Text("$index: ${item.title}"),
           trailing: IconButton(
             icon: const Icon(Icons.delete),
             onPressed: onTap,
@@ -150,7 +170,9 @@ class ItemWidget extends StatelessWidget {
           width: 500,
           height: 150,
           child: Card(
+            key: ValueKey(item.id),
             child: WebView(
+              key: ValueKey(item.id),
               initialUrl: "https://www.google.com/search?q=${item.title}",
             ),
           ),
