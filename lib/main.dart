@@ -47,6 +47,8 @@ class _MyHomePageState extends State<MyHomePage> {
       // Add one item every five times. Otherwise, no item changes.
       if (_refetchCount % 5 == 0) {
         _items = [generateNewData(), ..._items];
+        // If you want to validate changes to an item, comment out the above and comment in the below.
+        // _items[0].title = _generateString();
       } else {
         _items = [..._items];
       }
@@ -57,21 +59,21 @@ class _MyHomePageState extends State<MyHomePage> {
   int _refetchCount = 0;
 
   Item generateNewData() {
-    return Item(id: ValueKey<int>(_items.length + 1), title: _generateString());
+    return Item(id: UniqueKey(), title: _generateString());
   }
 
   List<Item> _items = [
-    Item(id: ValueKey<int>(0), title: "a"),
-    Item(id: ValueKey<int>(1), title: "b"),
-    Item(id: ValueKey<int>(2), title: "c"),
-    Item(id: ValueKey<int>(3), title: "d"),
-    Item(id: ValueKey<int>(4), title: "e"),
+    Item(id: UniqueKey(), title: "a"),
+    Item(id: UniqueKey(), title: "b"),
+    Item(id: UniqueKey(), title: "c"),
+    Item(id: UniqueKey(), title: "d"),
+    Item(id: UniqueKey(), title: "e"),
   ];
 
   void _addItem() {
     setState(() {
       _items = [
-        Item(id: ValueKey<int>(_items.length + 1), title: _generateString()),
+        Item(id: UniqueKey(), title: _generateString()),
         ..._items,
       ];
     });
@@ -134,7 +136,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
 class Item {
   final Key id;
-  final String title;
+  late String title;
 
   Item({
     required this.id,
@@ -159,7 +161,7 @@ class ItemWidget extends StatelessWidget {
     return Column(
       children: [
         ListTile(
-          key: ValueKey(item.id),
+          key: item.id,
           title: Text("$index: ${item.title}"),
           trailing: IconButton(
             icon: const Icon(Icons.delete),
@@ -170,9 +172,9 @@ class ItemWidget extends StatelessWidget {
           width: 500,
           height: 150,
           child: Card(
-            key: ValueKey(item.id),
+            key: item.id,
             child: WebView(
-              key: ValueKey(item.id),
+              key: item.id,
               initialUrl: "https://www.google.com/search?q=${item.title}",
             ),
           ),
