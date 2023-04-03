@@ -96,9 +96,9 @@ class _MyHomePageState extends State<MyHomePage> {
   List<Item> _generateNewDataList(int startIndex, int count) {
     return List.generate(
       count,
-      (index) => Item(
-        id: UniqueKey(),
-        title: _generateString()
+          (index) => Item(
+          id: UniqueKey(),
+          title: _generateString()
       ),
     );
   }
