@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 
 void main() {
   runApp(const MyApp());
@@ -32,8 +33,16 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  final PagingController<int, Item> _pagingController = PagingController(firstPageKey: 0);
+
+  List<Item>? get result => null;
+
   @override
   void initState() {
+    _pagingController.addPageRequestListener((pageKey) {
+      _fetchPage(pageKey);
+    });
+
     // Refetch once every 5 seconds.
     Timer.periodic(const Duration(seconds: 5), (timer) async {
       await refetch();
@@ -42,15 +51,30 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
   }
 
+  Future<void> _fetchPage(int pageKey) async {
+    try {
+      final items = _generateNewDataList(pageKey, 10);
+      final isLastPage = items.length < 10;
+      if (isLastPage) {
+        _pagingController.appendLastPage(items);
+      } else {
+        final nextPageKey = pageKey + items.length;
+        _pagingController.appendPage(items, nextPageKey);
+      }
+    } catch (error) {
+      _pagingController.error = error;
+    }
+  }
+
   Future<void> refetch() async {
     setState(() {
+      final tmp = _pagingController.itemList;
       // Add one item every five times. Otherwise, no item changes.
       if (_refetchCount % 5 == 0) {
-        _items = [generateNewData(), ..._items];
-        // If you want to validate changes to an item, comment out the above and comment in the below.
-        // _items[0].title = _generateString();
+        var items = [generateNewData(), ...?tmp];
+        _pagingController.itemList = items;
       } else {
-        _items = [..._items];
+        _pagingController.itemList = tmp;
       }
       _refetchCount ++;
     });
@@ -62,30 +86,6 @@ class _MyHomePageState extends State<MyHomePage> {
     return Item(id: UniqueKey(), title: _generateString());
   }
 
-  List<Item> _items = [
-    Item(id: UniqueKey(), title: "a"),
-    Item(id: UniqueKey(), title: "b"),
-    Item(id: UniqueKey(), title: "c"),
-    Item(id: UniqueKey(), title: "d"),
-    Item(id: UniqueKey(), title: "e"),
-  ];
-
-  void _addItem() {
-    setState(() {
-      _items = [
-        Item(id: UniqueKey(), title: _generateString()),
-        ..._items,
-      ];
-    });
-  }
-
-  void _removeItem(Key key) {
-    setState(() {
-      final index = _items.indexWhere((item) => item.id == key);
-      _items[index] = Item(id: _items[index].id, title: '');
-    });
-  }
-
   String _generateString() {
     final Random random = Random();
     final int length = random.nextInt(10) + 1;
@@ -93,14 +93,21 @@ class _MyHomePageState extends State<MyHomePage> {
         List.generate(length, (index) => random.nextInt(26) + 65));
   }
 
-  int? _findChildIndexCallback(Key key) {
-    for (int index = 0; index < _items.length; index++) {
-      final Item item = _items[index];
-      if (item.id == key) {
-        return index;
-      }
-    }
-    return null;
+  List<Item> _generateNewDataList(int startIndex, int count) {
+    return List.generate(
+      count,
+          (index) => Item(
+          id: UniqueKey(),
+          title: _generateString()
+      ),
+    );
+  }
+
+  void _removeItem(Key key) {
+    setState(() {
+      final index = _pagingController.itemList!.indexWhere((item) => item.id == key);
+      _pagingController.itemList![index] = Item(id: _pagingController.itemList![index].id, title: '');
+    });
   }
 
   @override
@@ -109,26 +116,26 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: Text(widget.title),
       ),
-      body: ListView.builder(
-        itemCount: _items.length,
-        findChildIndexCallback: (Key key) => _findChildIndexCallback(key),
-        cacheExtent: double.maxFinite,
-        itemBuilder: (BuildContext context, int index) {
-          if (_items[index].title == '') {
-            return const SizedBox.shrink();
-          }
-          return ItemWidget(
-            item: _items[index],
-            onTap: () => _removeItem(_items[index].id),
-            key: _items[index].id,
-            index: index,
-          );
-        },
+      body: PagedListView<int, Item>(
+        pagingController: _pagingController,
+        builderDelegate: PagedChildBuilderDelegate<Item>(
+          itemBuilder: (BuildContext context, Item item, int index) {
+            if (item.title == '') {
+              return const SizedBox.shrink();
+            }
+            return ItemWidget(
+              item: item,
+              onTap: () => _removeItem(item.id),
+              key: item.id,
+              index: index,
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _addItem,
-        tooltip: 'Add Item',
-        child: const Icon(Icons.add),
+        onPressed: () => _pagingController.refresh(),
+        tooltip: 'Refresh',
+        child: const Icon(Icons.refresh),
       ),
     );
   }
@@ -136,7 +143,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
 class Item {
   final Key id;
-  late String title;
+  String title;
 
   Item({
     required this.id,
