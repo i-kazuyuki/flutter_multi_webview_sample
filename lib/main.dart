@@ -1,14 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -25,22 +26,64 @@ class MyApp extends StatelessWidget {
 class MyHomePage extends StatefulWidget {
   final String title;
 
-  const MyHomePage({super.key, required this.title});
+  const MyHomePage({Key? key, required this.title}) : super(key: key);
 
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  final PagingController<int, String> _pagingController =
-  PagingController(firstPageKey: 0);
+  final PagingController<int, Item> _pagingController = PagingController(firstPageKey: 0);
+
+  List<Item>? get result => null;
 
   @override
   void initState() {
-    super.initState();
     _pagingController.addPageRequestListener((pageKey) {
-      _fetchData(pageKey);
+      _fetchPage(pageKey);
     });
+
+    // Refetch once every 5 seconds.
+    Timer.periodic(const Duration(seconds: 5), (timer) async {
+      await refetch();
+    });
+
+    super.initState();
+  }
+
+  Future<void> _fetchPage(int pageKey) async {
+    try {
+      final items = _generateNewDataList(pageKey, 10);
+      final isLastPage = items.length < 10;
+      if (isLastPage) {
+        _pagingController.appendLastPage(items);
+      } else {
+        final nextPageKey = pageKey + items.length;
+        _pagingController.appendPage(items, nextPageKey);
+      }
+    } catch (error) {
+      _pagingController.error = error;
+    }
+  }
+
+  Future<void> refetch() async {
+    setState(() {
+      final tmp = _pagingController.itemList;
+      // Add one item every five times. Otherwise, no item changes.
+      if (_refetchCount % 5 == 0) {
+        var items = [generateNewData(), ...?tmp];
+        _pagingController.itemList = items;
+      } else {
+        _pagingController.itemList = tmp;
+      }
+      _refetchCount ++;
+    });
+  }
+
+  int _refetchCount = 0;
+
+  Item generateNewData() {
+    return Item(id: UniqueKey(), title: _generateString());
   }
 
   String _generateString() {
@@ -50,22 +93,21 @@ class _MyHomePageState extends State<MyHomePage> {
         List.generate(length, (index) => random.nextInt(26) + 65));
   }
 
-  Future<void> _fetchData(int pageKey) async {
-    try {
-      final List<String> newData = [];
-      for(var i=0; i<10; i++){
-        newData.add(_generateString());
-      }
-      final isLastPage = newData.isEmpty;
-      if (isLastPage) {
-        _pagingController.appendLastPage([]);
-      } else {
-        final nextPageKey = pageKey + 1;
-        _pagingController.appendPage(newData, nextPageKey);
-      }
-    } catch (error) {
-      _pagingController.error = error;
-    }
+  List<Item> _generateNewDataList(int startIndex, int count) {
+    return List.generate(
+      count,
+      (index) => Item(
+        id: UniqueKey(),
+        title: _generateString()
+      ),
+    );
+  }
+
+  void _removeItem(Key key) {
+    setState(() {
+      final index = _pagingController.itemList!.indexWhere((item) => item.id == key);
+      _pagingController.itemList![index] = Item(id: _pagingController.itemList![index].id, title: '');
+    });
   }
 
   @override
@@ -74,42 +116,77 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: Text(widget.title),
       ),
-      body: PagedListView<int, String>(
+      body: PagedListView<int, Item>(
         pagingController: _pagingController,
-        builderDelegate: PagedChildBuilderDelegate<String>(
-          itemBuilder: (context, item, index) {
-            return Column(
-              children: [
-                ListTile(
-                  title: Text(item),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: () {
-                      _pagingController.itemList?.removeAt(index);
-                      _pagingController.refresh();
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: 500,
-                  height: 150,
-                  child: Card(
-                    child: InAppWebView(
-                        initialUrlRequest: URLRequest(
-                            url: Uri.parse("https://flutter.dev/"))),
-                  ),
-                ),
-              ],
+        builderDelegate: PagedChildBuilderDelegate<Item>(
+          itemBuilder: (BuildContext context, Item item, int index) {
+            if (item.title == '') {
+              return const SizedBox.shrink();
+            }
+            return ItemWidget(
+              item: item,
+              onTap: () => _removeItem(item.id),
+              key: item.id,
+              index: index,
             );
           },
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _pagingController.refresh(),
+        tooltip: 'Refresh',
+        child: const Icon(Icons.refresh),
+      ),
     );
   }
+}
+
+class Item {
+  final Key id;
+  String title;
+
+  Item({
+    required this.id,
+    required this.title,
+  });
+}
+
+class ItemWidget extends StatelessWidget {
+  final Item item;
+  final VoidCallback onTap;
+  final int index;
+
+  const ItemWidget({
+    Key? key,
+    required this.item,
+    required this.onTap,
+    required this.index,
+  }) : super(key: key);
 
   @override
-  void dispose() {
-    _pagingController.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ListTile(
+          key: item.id,
+          title: Text("$index: ${item.title}"),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: onTap,
+          ),
+        ),
+        SizedBox(
+          width: 500,
+          height: 150,
+          child: Card(
+            key: item.id,
+            child: WebView(
+              key: item.id,
+              initialUrl: "https://www.google.com/search?q=${item.title}",
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
